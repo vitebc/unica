@@ -79,13 +79,19 @@ Existing custom tools:
 
 ## Install
 
+**Linux / macOS:**
 ```sh
 ./install.sh [--unica-dir PATH] [--install-skills]
 ```
 
+**Windows (PowerShell 5.1+):**
+```powershell
+.\install.ps1 [-UnicaDir PATH] [-InstallSkills]
+```
+
 Builds `unica` from source, downloads v8-runner/bsl-analyzer/release-assets,
-builds rlm-tools via PyInstaller, generates manifest, and patches
-`opencode.json`. Run from the repo root — auto-detects the checkout.
+builds rlm-tools, generates manifest, and patches `opencode.json`.
+Run from the repo root — auto-detects the checkout.
 
 ## Build & Test
 

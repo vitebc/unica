@@ -25,16 +25,24 @@ MCP-клиентом: OpenCode, Claude Desktop, Continue.dev, Cursor и друг
 
 ### Локально (stdio)
 
+**Linux / macOS:**
 ```sh
 git clone https://github.com/vitebc/unica.git
 cd unica
 ./install.sh
 ```
 
+**Windows (PowerShell 5.1+):**
+```powershell
+git clone https://github.com/vitebc/unica.git
+cd unica
+.\install.ps1
+```
+
 После установки скрипт сам найдёт или создаст `opencode.json` с MCP-сервером.
 Перезапустите OpenCode — инструменты `unica.*` станут доступны.
 
-Поддерживаемые ОС: Linux x86_64, macOS ARM64.
+Поддерживаемые ОС: Linux x86_64, macOS ARM64, Windows x64.
 
 ### Сервер (SSE)
 
@@ -96,8 +104,11 @@ cargo test --package unica-coder
 cargo run --quiet --bin unica -- --help
 ```
 
-На Windows x64 нужны: Git Bash (для Git for Windows), Rust MSVC toolchain,
-Microsoft C++ Build Tools и Windows SDK.
+На Windows x64 нужны:
+- Git for Windows (`git`)
+- Rust MSVC toolchain (`cargo` из [rustup.rs](https://rustup.rs))
+- Microsoft C++ Build Tools и Windows SDK
+- Python 3.10+ для rlm-tools-bsl
 
 ## Структура
 
