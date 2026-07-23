@@ -39,21 +39,141 @@ cd unica
 .\install.ps1
 ```
 
-После установки скрипт сам найдёт или создаст `opencode.json` с MCP-сервером.
-Перезапустите OpenCode — инструменты `unica.*` станут доступны.
-
 Поддерживаемые ОС: Linux x86_64, macOS ARM64, Windows x64.
 
-### Сервер (SSE)
+После установки скрипт сам найдёт или создаст `opencode.json` с MCP-сервером.
+Перезапустите OpenCode/Dialect/Claude — инструменты `unica.*` станут доступны.
 
-Для удалённого доступа с рабочих станций:
+### Параметры install.sh (Linux / macOS)
 
 ```sh
-sudo ./install-server.sh -y
+./install.sh [options]
 ```
 
-Сервер будет доступен по `http://<ip>:3001/mcp`. В `opencode.json`
-на рабочей станции:
+| Опция | Назначение | По умолчанию |
+|---|---|---|
+| `--unica-dir PATH` | Директория установки | `~/.local/share/opencode/unica` |
+| `--repo-root PATH` | Путь к репозиторию | родительская папка скрипта |
+| `--build-all` | Собирать v8-runner и bsl-analyzer из исходников | скачать pre-built |
+| `--skip-verify` | Пропустить SHA-256 проверку | — |
+| `--opencode-config PATH` | Путь к `opencode.json` | авто-поиск |
+| `--install-skills` | Скопировать навыки в `.opencode/skills/` | — |
+| `-y, --yes` | Non-interactive (без запросов) | — |
+| `--help` | Показать справку | — |
+
+Примеры:
+
+```sh
+# Обычная установка
+./install.sh -y
+
+# С установкой навыков в проект
+./install.sh -y --install-skills
+
+# Указать opencode.json вручную
+./install.sh --opencode-config /path/to/project/opencode.json
+
+# Кастомная директория
+./install.sh --unica-dir /opt/unica-opencode
+
+# Полная сборка из исходников (медленно)
+./install.sh -y --build-all
+```
+
+### Параметры install.ps1 (Windows)
+
+```powershell
+.\install.ps1 [-UnicaDir PATH] [-InstallSkills] [-SkipVerify] [-Help]
+```
+
+| Параметр | Назначение | По умолчанию |
+|---|---|---|
+| `-UnicaDir PATH` | Директория установки | `$env:LOCALAPPDATA\opencode\unica` |
+| `-RepoRoot PATH` | Путь к репозиторию | родительская папка скрипта |
+| `-SkipVerify` | Пропустить SHA-256 проверку | — |
+| `-InstallSkills` | Скопировать навыки в `.opencode\skills\` | — |
+| `-Help` | Показать справку | — |
+
+### Что устанавливается
+
+```
+~/.local/share/opencode/unica/
+├── unica              # MCP-сервер (основной binary)
+├── v8-runner          # Запуск 1С:Предприятия
+├── bsl-analyzer       # Анализатор BSL-кода
+├── rlm-tools-bsl      # RLM-инструменты
+├── rlm-bsl-index      # RLM-индексатор
+├── third-party/
+│   └── manifest.json  # SHA-256 всех бинарников
+├── skills/            # Навыки 1С (SKILL.md)
+└── build/             # Временные файлы сборки
+```
+
+Все компоненты собираются из `third-party/tools.lock.json` репозитория:
+
+| Инструмент | Стратегия |
+|---|---|
+| `unica` | `cargo build` из `vitebc/unica` |
+| `v8-runner` | pre-built из `unica-toolchain` |
+| `bsl-analyzer` | pre-built из `unica-toolchain` |
+| `rlm-tools-bsl` | pre-built из `unica-toolchain` (Linux — PyInstaller) |
+| `rlm-bsl-index` | pre-built из `unica-toolchain` (Linux — PyInstaller) |
+
+### Проверка
+
+```json
+{
+  "mcp": {
+    "unica": {
+      "type": "local",
+      "command": ["~/.local/share/opencode/unica/unica"],
+      "enabled": true
+    }
+  }
+}
+```
+
+### Удаление
+
+```sh
+rm -rf ~/.local/share/opencode/unica
+# Удалить секцию "unica" из opencode.json
+```
+
+## Серверный режим (SSE)
+
+Unica можно развернуть на сервере для удалённого доступа.
+
+### Быстрый старт
+
+```sh
+# На сервере (Linux):
+sudo ./install-server.sh -y
+
+# После установки:
+# http://<server-ip>:3001/mcp
+```
+
+Скрипт `install-server.sh`:
+1. Устанавливает Unica (вызывает `install.sh`)
+2. Устанавливает Node.js + supergateway (SSE bridge)
+3. Создаёт systemd-сервис `unica-mcp`
+4. Настраивает автозапуск
+
+### Параметры install-server.sh
+
+```sh
+sudo ./install-server.sh [options]
+```
+
+| Опция | Назначение | По умолчанию |
+|---|---|---|
+| `-p, --port PORT` | HTTP порт | `3001` |
+| `--host HOST` | Интерфейс (0.0.0.0 — все) | `0.0.0.0` |
+| `-u, --unica-dir PATH` | Путь к Unica | `~/.local/share/opencode/unica` |
+| `-y, --yes` | Non-interactive | — |
+
+### Подключение с рабочей станции
 
 ```json
 {
@@ -66,6 +186,41 @@ sudo ./install-server.sh -y
   }
 }
 ```
+
+### Управление сервером
+
+```bash
+# Статус
+sudo systemctl status unica-mcp
+
+# Логи
+sudo journalctl -u unica-mcp -f
+
+# Перезапуск
+sudo systemctl restart unica-mcp
+
+# Остановка
+sudo systemctl stop unica-mcp
+```
+
+### Архитектура
+
+```
+┌──────────────────┐     SSE/HTTP      ┌──────────────────┐
+│  opencode client  │ ◄──────────────► │  unica server    │
+│  (ваша машина)    │   :3001/mcp      │  (localhost:3001)│
+└──────────────────┘                   └──────────────────┘
+                                               │
+                                               │ stdio
+                                               ▼
+                                       ┌──────────────────┐
+                                       │  unica MCP       │
+                                       └──────────────────┘
+```
+
+supergateway транслирует JSON-RPC из HTTP (SSE) в stdio и обратно.
+SSE-подписки и JSON-RPC сообщения — оба на пути `/mcp`.
+На 5-8 одновременных подключений создаётся по одному процессу unica на каждое.
 
 ## Использование с другими агентами
 
@@ -89,6 +244,19 @@ sudo ./install-server.sh -y
 {"jsonrpc":"2.0","id":1,"method":"tools/list"}
 ```
 
+## Требования
+
+- **Linux**: sudo, curl, git, python3, python3-venv (устанавливаются скриптом)
+- **macOS**: brew, git, python3 (устанавливаются скриптом)
+- **Windows**: Git for Windows, Rust MSVC toolchain, Microsoft C++ Build Tools + Windows SDK, Python 3.10+
+- Node.js, `curl`, `wget`, `jq` для обычной установки не нужны
+
+**GitHub API rate limit**: при частых запусках возможен лимит (60 req/h без токена).
+Установите `GITHUB_TOKEN` для увеличения:
+```sh
+export GITHUB_TOKEN=ghp_xxx
+```
+
 ## Разработка
 
 ```sh
@@ -104,19 +272,14 @@ cargo test --package unica-coder
 cargo run --quiet --bin unica -- --help
 ```
 
-На Windows x64 нужны:
-- Git for Windows (`git`)
-- Rust MSVC toolchain (`cargo` из [rustup.rs](https://rustup.rs))
-- Microsoft C++ Build Tools и Windows SDK
-- Python 3.10+ для rlm-tools-bsl
-
-## Структура
+## Структура репозитория
 
 - `crates/unica-coder/` — MCP runtime
 - `crates/unica-bootstrap/` — загрузчик runtime
 - `plugins/unica/skills/` — навыки 1С
 - `plugins/unica/third-party/tools.lock.json` — версии bundled tools
-- `install.sh` — установка для OpenCode
+- `install.sh` — установка для Linux/macOS
+- `install.ps1` — установка для Windows
 - `install-server.sh` — установка SSE-сервера
 
 [Авторы, источники и лицензии](plugins/unica/ATTRIBUTIONS.md).
