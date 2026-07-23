@@ -9,6 +9,7 @@ pub(crate) mod external;
 pub(crate) mod form;
 pub(crate) mod form_event_registry;
 pub(crate) mod help;
+pub(crate) mod ibases;
 pub(crate) mod interface;
 pub(crate) mod meta;
 pub(crate) mod meta_validation_context;

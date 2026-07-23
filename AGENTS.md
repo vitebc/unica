@@ -1,5 +1,19 @@
 # Agent Entry Points
 
+This is `vitebc/unica` — a fork of `IngvarConsulting/unica` with custom MCP tools.
+
+## Upstream
+
+- `origin` → `https://github.com/vitebc/unica.git`
+- `upstream` → `https://github.com/IngvarConsulting/unica.git`
+
+Sync from upstream:
+```sh
+git fetch upstream
+git rebase upstream/main
+cargo test --package unica-coder
+```
+
 ## Source Of Truth
 
 When changing Unica, resolve conflicts in this order:
@@ -42,6 +56,74 @@ fetch `https://kb.1ci.com/bin/download/*` attachments despite that path being
 disallowed by `robots.txt`; this is a narrow, explicitly approved exception and
 must not be generalized to other disallowed paths.
 
+## Custom Tools (vitebc forks)
+
+All custom tools are native `unica.*` MCP tools added in this fork.
+
+To add a new custom tool:
+
+1. **Operation logic**: `crates/unica-coder/src/infrastructure/native_operations/<name>.rs`
+   implement `pub(crate) fn invoke_read()` matching your operation string
+2. **Register module**: add `pub(crate) mod <name>;` in `native_operations.rs`
+3. **Wire dispatch**: add `<name>::invoke_read(...)` chain in `registry.rs`
+4. **ToolSpec**: add `ToolSpec { name: "unica.<group>.<action>", ... }` in
+   `application/mod.rs` (`configuration_tools()`)
+5. **Descriptor**: add `descriptor(...)` in `application/operation_descriptors.rs`
+6. **Test**: add unit test + update `lists_unica_orchestrator_scope` assertion
+
+Existing custom tools:
+
+| Tool | Description | Operation file |
+|------|-------------|----------------|
+| `unica.db.list` | Список информационных баз 1С (парсинг ibases.v8i) | `native_operations/ibases.rs` |
+
+## Install
+
+```sh
+./install.sh [--unica-dir PATH] [--install-skills]
+```
+
+Builds `unica` from source, downloads v8-runner/bsl-analyzer/release-assets,
+builds rlm-tools via PyInstaller, generates manifest, and patches
+`opencode.json`. Run from the repo root — auto-detects the checkout.
+
+## Build & Test
+
+```sh
+# Full verification
+cargo fmt --all -- --check
+cargo clippy --package unica-coder --all-targets -- -D warnings
+cargo test --package unica-coder
+python3.12 -m unittest discover -s tests/ci
+
+# Quick check
+cargo run --quiet --bin unica -- --help
+```
+
+Rust tests use `--test-threads=1` in CI (shared filesystem state).
+
+## Architecture
+
+```
+crates/unica-coder/
+├── src/
+│   ├── main.rs                      # Entry: stdio MCP, --workspace-service, --runtime-job-worker
+│   ├── lib.rs                       # Re-exports
+│   ├── application/                 # Use cases, ToolSpec, dispatch
+│   │   ├── mod.rs                   #   UnicaApplication, tools(), call_tool()
+│   │   ├── tool_contracts.rs        #   Input schema validation
+│   │   └── operation_descriptors.rs #   Path/support-guard rules
+│   ├── domain/                      # Cache, events, workspace types
+│   ├── infrastructure/              # Adapters, filesystem, processes
+│   │   ├── native_operations/       #   All native XML/DSL operation handlers
+│   │   │   ├── registry.rs          #   Dispatch: invoke_read → cf, form, meta, etc.
+│   │   │   ├── ibases.rs            #   [custom] ibases.v8i parser
+│   │   │   ...
+│   │   └── platform/                #   OS-specific process/filesystem
+│   └── interfaces/                  # MCP, workspace service, runtime job worker
+│       └── mcp.rs                   # JSON-RPC 2.0 stdio server
+```
+
 ## Development Rules
 
 - Fix root causes, not symptoms.
@@ -58,3 +140,4 @@ must not be generalized to other disallowed paths.
 - A stacked PR is allowed only when the user explicitly requests a named stack and its merge/rebase order. Each member must explain its parent, standalone review boundary, and closure plan in its PR body.
 - If an agent cannot push to the existing PR head, it must provide a patch or ask for access; it must not create a child PR as a workaround.
 - A distinct bug discovered during review belongs in an independent `main`-targeted PR or an issue, never in an implicit PR stack.
+- Only add new files; avoid modifying upstream files to minimise rebase conflicts.

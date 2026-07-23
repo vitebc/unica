@@ -398,7 +398,9 @@ mod tests {
             .await;
         let response = client.receive().await;
         let listed = response["result"]["tools"].as_array().unwrap();
-        assert_eq!(listed[0]["name"], "unica.cf.edit");
+        assert!(listed
+            .iter()
+            .any(|tool| tool["name"] == "unica.cf.edit"));
         assert!(listed
             .iter()
             .any(|tool| tool["name"] == "unica.project.status"));
@@ -408,7 +410,9 @@ mod tests {
     #[test]
     fn tool_definitions_contain_orchestrated_tool_names() {
         let listed = tool_definitions(&crate::application::tools());
-        assert_eq!(listed[0].name, "unica.cf.edit");
+        assert!(listed
+            .iter()
+            .any(|tool| tool.name == "unica.cf.edit"));
         for name in [
             "unica.project.status",
             "unica.project.map",
@@ -757,4 +761,570 @@ mod tests {
         assert_eq!(std::fs::read(&module).unwrap(), before_invalid);
         std::fs::remove_dir_all(root).unwrap();
     }
+    fn mcp_worker_admission_is_bounded_and_reusable() {
+        let registry = CancellationRegistry::default();
+        for _ in 0..MCP_MAX_TOOL_WORKERS {
+            registry.worker_started().unwrap();
+        }
+        assert!(registry
+            .worker_started()
+            .unwrap_err()
+            .contains("overloaded"));
+        registry.worker_finished();
+        registry.worker_started().unwrap();
+        for _ in 0..MCP_MAX_TOOL_WORKERS {
+            registry.worker_finished();
+        }
+    }
+
+    #[test]
+    fn mcp_overload_has_deterministic_json_rpc_error() {
+        let registry = CancellationRegistry::default();
+        for _ in 0..MCP_MAX_TOOL_WORKERS {
+            registry.worker_started().unwrap();
+        }
+        let writer = SharedWriter::default();
+        let output = writer.clone();
+        let dispatched = dispatch_tool_call(
+            json!({"id":"overload","params":{"name":"unica.code.search","arguments":{}}}),
+            Arc::new(|_, _, _| Ok("must not run".into())),
+            registry.clone(),
+            Arc::new(Mutex::new(writer)),
+        );
+        assert!(!dispatched);
+        let responses = output.responses();
+        assert_eq!(responses[0]["id"], "overload");
+        assert_eq!(responses[0]["error"]["code"], -32603);
+        assert!(responses[0]["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("overloaded"));
+        for _ in 0..MCP_MAX_TOOL_WORKERS {
+            registry.worker_finished();
+        }
+    }
+
+    #[test]
+    fn tools_list_contains_orchestrated_tool_names() {
+        let app = UnicaApplication::new();
+        let request = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" });
+        let response = handle_message(&app, request).unwrap();
+        let listed = response["result"]["tools"].as_array().unwrap();
+        assert!(listed
+            .iter()
+            .any(|tool| tool["name"] == "unica.cf.edit"));
+        assert!(listed
+            .iter()
+            .any(|tool| tool["name"] == "unica.project.status"));
+        assert!(listed
+            .iter()
+            .any(|tool| tool["name"] == "unica.project.map"));
+        assert!(listed
+            .iter()
+            .any(|tool| tool["name"] == "unica.standards.explain"));
+        for name in [
+            "unica.runtime.job.start",
+            "unica.runtime.job.status",
+            "unica.runtime.job.wait",
+            "unica.runtime.job.logs",
+            "unica.runtime.job.cancel",
+            "unica.runtime.job.list",
+        ] {
+            assert!(
+                listed.iter().any(|tool| tool["name"] == name),
+                "missing {name}"
+            );
+        }
+    }
+
+    #[test]
+    fn tools_list_exposes_flat_diagnostics_worktree_contract() {
+        let app = UnicaApplication::new();
+        let request = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" });
+        let response = handle_message(&app, request).unwrap();
+        let listed = response["result"]["tools"].as_array().unwrap();
+        let diagnostics = listed
+            .iter()
+            .find(|tool| tool["name"] == "unica.code.diagnostics")
+            .expect("unica.code.diagnostics must be listed");
+
+        let schema = &diagnostics["inputSchema"];
+        let properties = schema["properties"].as_object().unwrap();
+        for name in [
+            "cwd",
+            "sourceDir",
+            "mode",
+            "path",
+            "codes",
+            "timeoutSeconds",
+        ] {
+            assert!(properties.contains_key(name), "missing {name}");
+        }
+        assert!(schema.get("oneOf").is_none());
+    }
+
+    #[test]
+    fn native_tool_schema_is_contract_specific_and_does_not_expose_raw_args() {
+        let app = UnicaApplication::new();
+        let request = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" });
+        let response = handle_message(&app, request).unwrap();
+        let listed = response["result"]["tools"].as_array().unwrap();
+        let cf_info = listed
+            .iter()
+            .find(|tool| tool["name"] == "unica.cf.info")
+            .expect("unica.cf.info must be listed");
+
+        let schema = &cf_info["inputSchema"];
+        assert_eq!(schema["additionalProperties"], false);
+        assert!(schema["properties"].get("ConfigPath").is_some());
+        assert!(schema["properties"].get("cwd").is_some());
+        assert!(schema["properties"].get("dryRun").is_some());
+        assert!(schema["properties"].get("args").is_none());
+    }
+
+    #[test]
+    fn no_public_tool_schema_exposes_raw_adapter_args() {
+        let app = UnicaApplication::new();
+        let request = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" });
+        let response = handle_message(&app, request).unwrap();
+        let listed = response["result"]["tools"].as_array().unwrap();
+
+        for tool in listed {
+            let properties = &tool["inputSchema"]["properties"];
+            assert!(
+                properties.get("args").is_none(),
+                "{} must not expose raw adapter args",
+                tool["name"]
+            );
+        }
+    }
+
+    #[test]
+    fn mcp_dispatcher_keeps_ping_responsive_and_cancels_the_requested_call() {
+        let (sender, receiver) = mpsc::channel();
+        let writer = SharedWriter::default();
+        let output = writer.clone();
+        let cancellation_seen = Arc::new(AtomicBool::new(false));
+        let seen = Arc::clone(&cancellation_seen);
+        let handler = Arc::new(
+            move |_name: &str, _arguments: &Map<String, Value>, cancellation: CancellationToken| {
+                while !cancellation.is_cancelled() {
+                    thread::sleep(Duration::from_millis(5));
+                }
+                seen.store(true, Ordering::SeqCst);
+                Ok("unreachable success".to_string())
+            },
+        );
+        let dispatcher = thread::spawn(move || {
+            run_stdio_with_handler(
+                BufReader::new(ChannelReader::new(receiver)),
+                writer,
+                Arc::new(UnicaApplication::new()),
+                handler,
+            )
+        });
+
+        send_message(
+            &sender,
+            json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize" }),
+        );
+        send_message(
+            &sender,
+            json!({ "jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": { "name": "unica.code.search", "arguments": {} } }),
+        );
+        send_message(
+            &sender,
+            json!({ "jsonrpc": "2.0", "id": 8, "method": "ping" }),
+        );
+
+        let first = output.wait_for_responses(2);
+        assert_eq!(first[0]["id"], 1);
+        assert_eq!(first[1]["id"], 8, "ping must not wait for tools/call");
+        assert!(!cancellation_seen.load(Ordering::SeqCst));
+
+        send_message(
+            &sender,
+            json!({ "jsonrpc": "2.0", "method": "notifications/cancelled", "params": { "requestId": 7, "reason": "test" } }),
+        );
+        let responses = output.wait_for_responses(3);
+        assert_eq!(responses[2]["id"], 7);
+        assert_eq!(responses[2]["error"]["code"], -32800);
+        assert_eq!(responses[2]["error"]["message"], "request cancelled");
+        assert!(cancellation_seen.load(Ordering::SeqCst));
+
+        drop(sender);
+        dispatcher.join().unwrap();
+    }
+
+    #[test]
+    fn mcp_dispatcher_cancels_active_calls_on_eof() {
+        let (sender, receiver) = mpsc::channel();
+        let writer = SharedWriter::default();
+        let output = writer.clone();
+        let cancellation_seen = Arc::new(AtomicBool::new(false));
+        let seen = Arc::clone(&cancellation_seen);
+        let handler = Arc::new(
+            move |_name: &str, _arguments: &Map<String, Value>, cancellation: CancellationToken| {
+                while !cancellation.is_cancelled() {
+                    thread::sleep(Duration::from_millis(5));
+                }
+                seen.store(true, Ordering::SeqCst);
+                Ok("unreachable success".to_string())
+            },
+        );
+        let dispatcher = thread::spawn(move || {
+            run_stdio_with_handler(
+                BufReader::new(ChannelReader::new(receiver)),
+                writer,
+                Arc::new(UnicaApplication::new()),
+                handler,
+            )
+        });
+
+        send_message(
+            &sender,
+            json!({ "jsonrpc": "2.0", "id": "work", "method": "tools/call", "params": { "name": "unica.code.search", "arguments": {} } }),
+        );
+        drop(sender);
+        dispatcher.join().unwrap();
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while !cancellation_seen.load(Ordering::SeqCst) {
+            assert!(
+                Instant::now() < deadline,
+                "active call did not observe EOF cancellation"
+            );
+            thread::sleep(Duration::from_millis(5));
+        }
+        let responses = output.responses();
+        assert!(
+            responses.len() <= 1,
+            "a request may emit at most one response"
+        );
+    }
+
+    #[test]
+    fn mcp_dispatcher_drains_a_finishing_call_before_eof_cancellation() {
+        let (sender, receiver) = mpsc::channel();
+        let writer = SharedWriter::default();
+        let output = writer.clone();
+        let handler = Arc::new(
+            move |_name: &str,
+                  _arguments: &Map<String, Value>,
+                  _cancellation: CancellationToken| {
+                thread::sleep(Duration::from_millis(50));
+                Ok("completed before EOF grace expired".to_string())
+            },
+        );
+        let dispatcher = thread::spawn(move || {
+            run_stdio_with_handler(
+                BufReader::new(ChannelReader::new(receiver)),
+                writer,
+                Arc::new(UnicaApplication::new()),
+                handler,
+            )
+        });
+
+        send_message(
+            &sender,
+            json!({ "jsonrpc": "2.0", "id": "finite", "method": "tools/call", "params": { "name": "unica.code.search", "arguments": {} } }),
+        );
+        drop(sender);
+        dispatcher.join().unwrap();
+
+        let responses = output.responses();
+        assert_eq!(responses.len(), 1, "accepted call must publish before exit");
+        assert_eq!(responses[0]["id"], "finite");
+        assert_eq!(
+            responses[0]["result"]["content"][0]["text"],
+            "completed before EOF grace expired"
+        );
+    }
+
+    #[test]
+    fn mcp_dispatcher_closes_publication_after_bounded_eof_cancellation() {
+        let (sender, receiver) = mpsc::channel();
+        let writer = SharedWriter::default();
+        let output = writer.clone();
+        let release = Arc::new((Mutex::new(false), Condvar::new()));
+        let release_for_handler = Arc::clone(&release);
+        let finished = Arc::new(AtomicBool::new(false));
+        let finished_for_handler = Arc::clone(&finished);
+        let handler = Arc::new(
+            move |_: &str, _: &Map<String, Value>, _: CancellationToken| {
+                let (released, changed) = &*release_for_handler;
+                let mut released = released.lock().unwrap();
+                while !*released {
+                    released = changed.wait(released).unwrap();
+                }
+                finished_for_handler.store(true, Ordering::SeqCst);
+                Ok("late result must not publish".to_string())
+            },
+        );
+        let dispatcher = thread::spawn(move || {
+            run_stdio_with_handler(
+                BufReader::new(ChannelReader::new(receiver)),
+                writer,
+                Arc::new(UnicaApplication::new()),
+                handler,
+            )
+        });
+
+        send_message(
+            &sender,
+            json!({ "jsonrpc": "2.0", "id": "stuck", "method": "tools/call", "params": { "name": "unica.code.search", "arguments": {} } }),
+        );
+        drop(sender);
+        let started = Instant::now();
+        dispatcher.join().unwrap();
+        assert!(started.elapsed() < Duration::from_secs(3));
+        assert!(output.responses().is_empty());
+
+        let (released, changed) = &*release;
+        *released.lock().unwrap() = true;
+        changed.notify_all();
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while !finished.load(Ordering::SeqCst) {
+            assert!(Instant::now() < deadline, "late worker did not finish");
+            thread::yield_now();
+        }
+        thread::sleep(Duration::from_millis(20));
+        assert!(
+            output.responses().is_empty(),
+            "late response escaped terminal gate"
+        );
+    }
+
+    #[test]
+    fn mcp_dispatcher_close_does_not_wait_for_an_admitted_blocking_writer() {
+        let (sender, receiver) = mpsc::channel();
+        let writer = BlockingWriter::default();
+        let entered = Arc::clone(&writer.entered);
+        let release = Arc::clone(&writer.release);
+        let output = writer.clone();
+        let (done_sender, done_receiver) = mpsc::channel();
+        let dispatcher = thread::spawn(move || {
+            run_stdio_with_handler(
+                BufReader::new(ChannelReader::new(receiver)),
+                writer,
+                Arc::new(UnicaApplication::new()),
+                Arc::new(|_, _, _| Ok("admitted response".to_string())),
+            );
+            done_sender.send(()).unwrap();
+        });
+
+        send_message(
+            &sender,
+            json!({ "jsonrpc": "2.0", "id": "admitted", "method": "tools/call", "params": { "name": "unica.code.search", "arguments": {} } }),
+        );
+        let entered_deadline = Instant::now() + Duration::from_secs(1);
+        while !entered.load(Ordering::SeqCst) {
+            assert!(Instant::now() < entered_deadline, "writer was not admitted");
+            thread::yield_now();
+        }
+        drop(sender);
+
+        let returned_bounded = done_receiver.recv_timeout(Duration::from_secs(3)).is_ok();
+        release.store(true, Ordering::SeqCst);
+        let publication_completed = output.wait_for_completion(Duration::from_secs(1));
+        dispatcher.join().unwrap();
+        assert!(
+            returned_bounded,
+            "terminal close waited for blocking writer I/O"
+        );
+        assert!(
+            publication_completed,
+            "admitted publication did not finish after writer release"
+        );
+
+        let responses = String::from_utf8(output.bytes.lock().unwrap().clone())
+            .unwrap()
+            .lines()
+            .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+            .collect::<Vec<_>>();
+        assert_eq!(responses.len(), 1, "the one admitted write may complete");
+        assert_eq!(responses[0]["id"], "admitted");
+    }
+
+    #[test]
+    fn terminal_registry_rejects_new_work_and_publication() {
+        let registry = CancellationRegistry::default();
+        let writer = SharedWriter::default();
+        let output = writer.clone();
+        let writer = Arc::new(Mutex::new(writer));
+
+        registry.close();
+
+        assert!(registry.register(&json!("late")).is_err());
+        assert!(!registry.publish(&writer, success_response(json!("late"), json!({}))));
+        assert!(output.responses().is_empty());
+    }
+
+    #[test]
+    fn mcp_dispatcher_registry_keeps_numeric_and_string_ids_distinct() {
+        let registry = CancellationRegistry::default();
+        let numeric = registry.register(&json!(7)).unwrap();
+        let string = registry.register(&json!("7")).unwrap();
+
+        assert!(registry.cancel(&json!(7)));
+        assert!(numeric.is_cancelled());
+        assert!(!string.is_cancelled());
+    }
+
+    #[test]
+    fn mcp_dispatcher_worker_panic_releases_request_id() {
+        let registry = CancellationRegistry::default();
+        let writer = SharedWriter::default();
+        let output = writer.clone();
+        let writer = Arc::new(Mutex::new(writer));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed_calls = Arc::clone(&calls);
+        let handler: Arc<ToolCallHandler> = Arc::new(
+            move |_name: &str,
+                  _arguments: &Map<String, Value>,
+                  _cancellation: CancellationToken| {
+                if observed_calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                    panic!("simulated tool panic");
+                }
+                Ok("second call completed".to_string())
+            },
+        );
+        let request = json!({ "jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": { "name": "unica.code.search", "arguments": {} } });
+
+        assert!(dispatch_tool_call(
+            request.clone(),
+            Arc::clone(&handler),
+            registry.clone(),
+            Arc::clone(&writer),
+        ));
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            match registry.register(&json!(7)) {
+                Ok(_) => {
+                    registry.finish(&json!(7));
+                    break;
+                }
+                Err(error) if error.starts_with("duplicate request id:") => {
+                    assert!(
+                        Instant::now() < deadline,
+                        "panic cleanup did not release request id"
+                    );
+                    thread::yield_now();
+                }
+                Err(error) => panic!("unexpected registry error: {error}"),
+            }
+        }
+        assert!(dispatch_tool_call(request, handler, registry, writer));
+
+        let responses = output.wait_for_responses(1);
+        assert_eq!(responses[0]["id"], 7);
+        assert!(
+            responses[0].get("result").is_some(),
+            "request id remained registered after worker panic: {}",
+            responses[0]
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn mcp_dispatcher_late_cancellation_cannot_change_a_fixed_result() {
+        let registry = CancellationRegistry::default();
+        let id = json!(7);
+        let cancellation = registry.register(&id).unwrap();
+
+        assert!(!registry.finish(&id));
+        assert!(!registry.cancel(&id));
+        assert!(!cancellation.is_cancelled());
+    }
+
+    #[test]
+    fn mcp_dispatcher_reuses_id_while_completed_response_is_waiting_to_publish() {
+        let registry = CancellationRegistry::default();
+        let writer = BlockingWriter::default();
+        let entered = Arc::clone(&writer.entered);
+        let release = Arc::clone(&writer.release);
+        let writer = Arc::new(Mutex::new(writer));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed_calls = Arc::clone(&calls);
+        let handler: Arc<ToolCallHandler> = Arc::new(move |_, _, _| {
+            observed_calls.fetch_add(1, Ordering::SeqCst);
+            Ok("done".to_string())
+        });
+        let request = json!({ "jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": { "name": "unica.code.search", "arguments": {} } });
+
+        dispatch_tool_call(
+            request.clone(),
+            Arc::clone(&handler),
+            registry.clone(),
+            Arc::clone(&writer),
+        );
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while !entered.load(Ordering::SeqCst) {
+            assert!(
+                Instant::now() < deadline,
+                "first response did not reach writer"
+            );
+            thread::yield_now();
+        }
+
+        let second_dispatch = thread::spawn(move || {
+            dispatch_tool_call(request, handler, registry, writer);
+        });
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while calls.load(Ordering::SeqCst) < 2 && Instant::now() < deadline {
+            thread::yield_now();
+        }
+        let observed = calls.load(Ordering::SeqCst);
+        release.store(true, Ordering::SeqCst);
+        second_dispatch.join().unwrap();
+
+        assert_eq!(
+            observed, 2,
+            "completed request id remained registered until response publication"
+        );
+    }
+
+    #[test]
+    fn mcp_dispatcher_writer_failure_rejects_later_work_without_side_effects() {
+        let registry = CancellationRegistry::default();
+        let writer = FailingWriter::default();
+        let write_failed = Arc::clone(&writer.0);
+        let writer = Arc::new(Mutex::new(writer));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed_calls = Arc::clone(&calls);
+        let handler: Arc<ToolCallHandler> = Arc::new(move |_, _, _| {
+            observed_calls.fetch_add(1, Ordering::SeqCst);
+            Ok("done".to_string())
+        });
+
+        assert!(dispatch_tool_call(
+            json!({ "jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": { "name": "unica.code.search", "arguments": {} } }),
+            Arc::clone(&handler),
+            registry.clone(),
+            Arc::clone(&writer),
+        ));
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while !write_failed.load(Ordering::SeqCst) || !registry.is_failed() {
+            assert!(
+                Instant::now() < deadline,
+                "writer failure did not become terminal"
+            );
+            thread::yield_now();
+        }
+
+        let spawned = dispatch_tool_call(
+            json!({ "jsonrpc": "2.0", "id": 8, "method": "tools/call", "params": { "name": "unica.code.search", "arguments": {} } }),
+            handler,
+            registry,
+            writer,
+        );
+
+        assert!(!spawned, "terminal dispatcher spawned a rejected worker");
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "work started after terminal writer failure"
+        );
+    }
+>>>>>>> 9f8d9b6 (add unica.db.list tool and install script)
 }

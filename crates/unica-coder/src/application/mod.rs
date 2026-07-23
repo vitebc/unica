@@ -944,6 +944,17 @@ fn source_set_summary(source_map: &crate::domain::project_sources::ProjectSource
 fn configuration_tools() -> Vec<ToolSpec> {
     vec![
         ToolSpec {
+            name: "unica.db.list",
+            description:
+                "List 1C infobases registered on this machine (parsed from ibases.v8i).",
+            mutating: false,
+            cache_access: CacheAccess::default(),
+            handler: ToolHandler::NativeOperation {
+                operation: "ibases-list",
+                event: None,
+            },
+        },
+        ToolSpec {
             name: "unica.cf.edit",
             description:
                 "Edit root Configuration.xml properties, ChildObjects, panels, and home page.",
@@ -1500,6 +1511,7 @@ mod tests {
         assert!(names.contains(&"unica.dcs.edit"));
         assert!(names.contains(&"unica.mxl.compile"));
         assert!(names.contains(&"unica.role.validate"));
+        assert!(names.contains(&"unica.db.list"));
         assert!(names.contains(&"unica.support.edit"));
         assert!(names.contains(&"unica.epf.init"));
         assert!(names.contains(&"unica.erf.init"));

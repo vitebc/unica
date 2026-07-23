@@ -4,7 +4,8 @@ use serde_json::{Map, Value};
 use std::path::PathBuf;
 
 use super::{
-    cf, cfe, dcs, external, form, help, interface, meta, mxl, role, subsystem, support, template,
+    cf, cfe, dcs, external, form, help, ibases, interface, meta, mxl, role, subsystem, support,
+    template,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -108,6 +109,7 @@ pub(crate) fn invoke_read(
 ) -> Option<Result<AdapterOutcome, String>> {
     cf::invoke_read(operation, tool_name, args, context)
         .or_else(|| cfe::invoke_read(operation, tool_name, args, context))
+        .or_else(|| ibases::invoke_read(operation, tool_name, args, context))
         .or_else(|| meta::invoke_read(operation, tool_name, args, context))
         .or_else(|| form::invoke_read(operation, tool_name, args, context))
         .or_else(|| interface::invoke_read(operation, tool_name, args, context))

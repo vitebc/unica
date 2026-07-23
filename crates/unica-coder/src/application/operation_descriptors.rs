@@ -207,6 +207,7 @@ pub(super) const NATIVE_OPERATION_DESCRIPTORS: &[OperationDescriptor] = &[
             SupportGuardRequirement::Editable,
         )),
     ),
+    descriptor("ibases-list", EMPTY, EMPTY, EMPTY, None),
     descriptor_with_paths(
         "cf-edit",
         EMPTY,
