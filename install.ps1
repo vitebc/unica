@@ -1,4 +1,4 @@
-#!/usr/bin/env pwsh
+﻿#!/usr/bin/env pwsh
 <#
 .SYNOPSIS
     Build vitebc/unica + runtime tools and configure opencode on Windows.
@@ -314,9 +314,9 @@ function Install-SkillsToProject {
 # ---- Verify installation ----
 function Verify-Installation {
     $errors = 0
-    Write-Host "`n--- Проверка установленных файлов ---`n"
+    Write-Host "`n--- РџСЂРѕРІРµСЂРєР° СѓСЃС‚Р°РЅРѕРІР»РµРЅРЅС‹С… С„Р°Р№Р»РѕРІ ---`n"
 
-    Write-Host "  Бинарники ($ToolsDir):"
+    Write-Host "  Р‘РёРЅР°СЂРЅРёРєРё ($ToolsDir):"
     $toolList = @("unica.exe", "v8-runner.exe", "bsl-analyzer.exe", "rlm-tools-bsl.exe", "rlm-bsl-index.exe")
     foreach ($tool in $toolList) {
         $path = Join-Path $ToolsDir $tool
@@ -324,43 +324,43 @@ function Verify-Installation {
             $size = (Get-Item $path).Length
             if ($tool -eq "unica.exe") {
                 $result = & $path --help 2>&1 | Select-String -Pattern "unica"
-                if ($result) { Write-Host "    [OK]  $tool ($size bytes, запускается)" -ForegroundColor Green }
-                else { Write-Host "    [ERR] $tool (файл есть, но не запускается)" -ForegroundColor Red; $errors++ }
+                if ($result) { Write-Host "    [OK]  $tool ($size bytes, Р·Р°РїСѓСЃРєР°РµС‚СЃСЏ)" -ForegroundColor Green }
+                else { Write-Host "    [ERR] $tool (С„Р°Р№Р» РµСЃС‚СЊ, РЅРѕ РЅРµ Р·Р°РїСѓСЃРєР°РµС‚СЃСЏ)" -ForegroundColor Red; $errors++ }
             } else {
                 Write-Host "    [OK]  $tool ($size bytes)" -ForegroundColor Green
             }
         } else {
-            Write-Host "    [--]  $tool (не установлен)" -ForegroundColor DarkYellow
+            Write-Host "    [--]  $tool (РЅРµ СѓСЃС‚Р°РЅРѕРІР»РµРЅ)" -ForegroundColor DarkYellow
             $errors++
         }
     }
 
-    Write-Host "`n  Манифест:"
+    Write-Host "`n  РњР°РЅРёС„РµСЃС‚:"
     $manifest = Join-Path $ThirdPartyDir "manifest.json"
     if (Test-Path $manifest) {
         Write-Host "    [OK]  manifest.json" -ForegroundColor Green
     } else {
-        Write-Host "    [--]  manifest.json (не найден)" -ForegroundColor DarkYellow; $errors++
+        Write-Host "    [--]  manifest.json (РЅРµ РЅР°Р№РґРµРЅ)" -ForegroundColor DarkYellow; $errors++
     }
 
-    Write-Host "`n  Навыки:"
+    Write-Host "`n  РќР°РІС‹РєРё:"
     if (Test-Path $SkillsDir) {
         $skillCount = (Get-ChildItem $SkillsDir -Recurse -Filter "SKILL.md").Count
-        Write-Host "    [OK]  skills/ ($skillCount навыков)" -ForegroundColor Green
+        Write-Host "    [OK]  skills/ ($skillCount РЅР°РІС‹РєРѕРІ)" -ForegroundColor Green
     } else {
-        Write-Host "    [--]  skills/ (не установлены)" -ForegroundColor DarkYellow; $errors++
+        Write-Host "    [--]  skills/ (РЅРµ СѓСЃС‚Р°РЅРѕРІР»РµРЅС‹)" -ForegroundColor DarkYellow; $errors++
     }
 
     Write-Host ""
-    if ($errors -eq 0) { msg "Все компоненты установлены" }
-    else { warn "$errors компонентов отсутствуют или повреждены" }
+    if ($errors -eq 0) { msg "Р’СЃРµ РєРѕРјРїРѕРЅРµРЅС‚С‹ СѓСЃС‚Р°РЅРѕРІР»РµРЅС‹" }
+    else { warn "$errors РєРѕРјРїРѕРЅРµРЅС‚РѕРІ РѕС‚СЃСѓС‚СЃС‚РІСѓСЋС‚ РёР»Рё РїРѕРІСЂРµР¶РґРµРЅС‹" }
 }
 
 # ---- Main ----
 function Main {
     Write-Host ""
     Write-Host "==============================================" -ForegroundColor Cyan
-    Write-Host " vitebc/unica — Windows installer" -ForegroundColor Cyan
+    Write-Host " vitebc/unica вЂ” Windows installer" -ForegroundColor Cyan
     Write-Host "==============================================" -ForegroundColor Cyan
     Write-Host ""
 
