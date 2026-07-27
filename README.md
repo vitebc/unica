@@ -23,7 +23,19 @@ MCP-клиентом: OpenCode, Claude Desktop, Continue.dev, Cursor и друг
 
 ## Установка
 
-### Локально (stdio)
+### One-liner
+
+**Linux / macOS:**
+```sh
+curl -fsSL https://github.com/vitebc/unica/raw/main/install.sh | bash -s -- -y --install-skills
+```
+
+**Windows (PowerShell 5.1+):**
+```powershell
+iwr -useb https://github.com/vitebc/unica/raw/main/install.ps1 | iex
+```
+
+### Подробно (клонированием)
 
 **Linux / macOS:**
 ```sh
