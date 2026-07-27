@@ -48,6 +48,7 @@ $ProgressPreference = "SilentlyContinue"
 if (-not $PSCommandPath -and -not (Test-Path ".\Cargo.toml")) {
     Write-Host "==> Detected one-liner install. Cloning vitebc/unica..." -ForegroundColor Cyan
     $workDir = Join-Path $env:TEMP "unica-install-$PID"
+    if (Test-Path $workDir) { Remove-Item -Recurse -Force $workDir }
     git clone --depth 1 "https://github.com/vitebc/unica.git" $workDir 2>&1 | Out-Null
     & "$workDir\install.ps1" @PSBoundParameters
     exit $LASTEXITCODE
