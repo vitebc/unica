@@ -19,6 +19,15 @@ set -euo pipefail
 #   --help                 Show this help
 # ============================================================
 
+# ---- One-liner redirect: if not inside the repo, clone and re-exec ----
+if [[ ! -f "${0%/*}/Cargo.toml" ]] && [[ ! -f "Cargo.toml" ]]; then
+    echo "==> Detected one-liner install. Cloning vitebc/unica..."
+    WORK_DIR="$(mktemp -d 2>/dev/null || echo "/tmp/unica-install-$$")"
+    mkdir -p "$WORK_DIR"
+    git clone --depth 1 "https://github.com/vitebc/unica.git" "$WORK_DIR"
+    exec bash "$WORK_DIR/install.sh" "$@"
+fi
+
 REPO_ROOT=""
 UNICA_DIR=""
 BUILD_ALL=0
@@ -64,11 +73,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ---- Default paths ----
-if [[ -n "${BASH_SOURCE+x}" ]]; then
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-else
-    SCRIPT_DIR="$PWD"
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$PWD}")" && pwd 2>/dev/null || echo "$PWD")"
 if [[ -z "$REPO_ROOT" ]]; then
     if [[ -f "$SCRIPT_DIR/Cargo.toml" ]] && grep -q 'unica-coder' "$SCRIPT_DIR/Cargo.toml" 2>/dev/null; then
         REPO_ROOT="$SCRIPT_DIR"
