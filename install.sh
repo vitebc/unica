@@ -64,8 +64,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ---- Default paths ----
-THIS_SRC="${BASH_SOURCE[0]:-$0}"
-SCRIPT_DIR="$( (cd "$(dirname "$THIS_SRC")" && pwd) 2>/dev/null || echo "$PWD" )"
+if [[ -n "${BASH_SOURCE+x}" ]]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+    SCRIPT_DIR="$PWD"
+fi
 if [[ -z "$REPO_ROOT" ]]; then
     if [[ -f "$SCRIPT_DIR/Cargo.toml" ]] && grep -q 'unica-coder' "$SCRIPT_DIR/Cargo.toml" 2>/dev/null; then
         REPO_ROOT="$SCRIPT_DIR"
