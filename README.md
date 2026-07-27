@@ -32,7 +32,7 @@ curl -fsSL https://github.com/vitebc/unica/raw/main/install.sh | bash -s -- -y -
 
 **Windows (PowerShell 5.1+):**
 ```powershell
-iwr -useb https://github.com/vitebc/unica/raw/main/install.ps1 | iex
+iex ((iwr -useb https://github.com/vitebc/unica/raw/main/install.ps1).Content)
 ```
 
 ### Подробно (клонированием)
