@@ -49,7 +49,8 @@ if (-not (Test-Path ".\Cargo.toml")) {
     Write-Host "==> Cloning vitebc/unica..." -ForegroundColor Cyan
     $workDir = Join-Path $env:TEMP "unica-install-$PID"
     if (Test-Path $workDir) { Remove-Item -Recurse -Force $workDir }
-    & git clone --depth 1 "https://github.com/vitebc/unica.git" $workDir 2>$null
+    cmd /c "git clone --depth 1 https://github.com/vitebc/unica.git `"$workDir`" >nul 2>&1"
+    if ($LASTEXITCODE -ne 0) { throw "git clone failed (exit $LASTEXITCODE)" }
     & "$workDir\install.ps1" @PSBoundParameters
     exit $LASTEXITCODE
 }
