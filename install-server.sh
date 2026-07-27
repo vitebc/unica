@@ -25,7 +25,7 @@ if [[ ! -f "${0%/*}/Cargo.toml" ]] && [[ ! -f "Cargo.toml" ]]; then
     exec sudo bash "$WORK_DIR/install-server.sh" "$@"
 fi
 
-SERVER_PORT=3001
+SERVER_PORT=3100
 HOST="0.0.0.0"
 UNICA_DIR=""
 ASSUME_YES=0

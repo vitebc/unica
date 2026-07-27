@@ -169,7 +169,7 @@ curl -fsSL https://github.com/vitebc/unica/raw/main/install-server.sh | sudo bas
 sudo ./install-server.sh -y
 
 # После установки:
-# http://<server-ip>:3001/mcp
+# http://<server-ip>:3100/mcp
 ```
 
 Скрипт `install-server.sh`:
@@ -186,7 +186,7 @@ sudo ./install-server.sh [options]
 
 | Опция | Назначение | По умолчанию |
 |---|---|---|
-| `-p, --port PORT` | HTTP порт | `3001` |
+| `-p, --port PORT` | HTTP порт | `3100` |
 | `--host HOST` | Интерфейс (0.0.0.0 — все) | `0.0.0.0` |
 | `-u, --unica-dir PATH` | Путь к Unica | `~/.local/share/opencode/unica` |
 | `-y, --yes` | Non-interactive | — |
@@ -198,7 +198,7 @@ sudo ./install-server.sh [options]
   "mcp": {
     "unica": {
       "type": "remote",
-      "url": "http://192.168.1.100:3001/mcp",
+      "url": "http://192.168.1.100:3100/mcp",
       "enabled": true
     }
   }
@@ -226,7 +226,7 @@ sudo systemctl stop unica-mcp
 ```
 ┌──────────────────┐     SSE/HTTP      ┌──────────────────┐
 │  opencode client  │ ◄──────────────► │  unica server    │
-│  (ваша машина)    │   :3001/mcp      │  (localhost:3001)│
+│  (ваша машина)    │   :3100/mcp      │  (localhost:3100)│
 └──────────────────┘                   └──────────────────┘
                                                │
                                                │ stdio
