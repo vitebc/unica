@@ -214,7 +214,7 @@ After=network.target
 Type=simple
 User=${RUN_USER}
 Group=${RUN_USER}
-ExecStart=${supergateway_path} --port ${SERVER_PORT} --stdio ${UNICA_BIN} --ssePath /mcp --messagePath /mcp --healthEndpoint /health
+ExecStart=${supergateway_path} --port ${SERVER_PORT} --host ${HOST} --stdio ${UNICA_BIN} --sse-path /sse --message-path /message --health-endpoint /health
 Restart=always
 RestartSec=5
 LimitNOFILE=65536
@@ -266,14 +266,14 @@ print_summary() {
     echo " Unica MCP Server installed!"
     echo "=============================================="
     echo ""
-    echo " Server URL:    http://${ip}:${SERVER_PORT}/mcp"
+    echo " Server URL:    http://${ip}:${SERVER_PORT}/sse"
     echo " Binary:        ${UNICA_BIN}"
     echo " Service:       unica-mcp"
     echo " Logs:          sudo journalctl -u unica-mcp -f"
     echo ""
     echo " Add to opencode.json on your workstation:"
     echo '  { "mcp": { "unica": { "type": "remote",'
-    echo '    "url": "http://'${ip}:${SERVER_PORT}'/mcp",'
+    echo '    "url": "http://'${ip}:${SERVER_PORT}'/sse",'
     echo '    "enabled": true } } }'
     echo ""
     echo " Skills: ${UNICA_DIR}/skills/"
