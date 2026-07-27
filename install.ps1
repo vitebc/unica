@@ -1,5 +1,4 @@
-﻿#!/usr/bin/env pwsh
-<#
+﻿<#
 .SYNOPSIS
     Build vitebc/unica + runtime tools and configure opencode on Windows.
 
@@ -168,15 +167,7 @@ function Download-Tool($tool) {
     $dest = Join-Path $ToolsDir $tool.AssetName
     $exeDest = Join-Path $ToolsDir "$($tool.Name).exe"
 
-    if ($tool.Name -eq "v8-runner") {
-        # v8-runner publishes tar.gz on GitHub, but we download from unica-toolchain as .exe
-        download_file $url $dest
-    } elseif ($tool.Name -eq "bsl-analyzer") {
-        download_file $url $dest
-    } else {
-        # rlm tools
-        download_file $url $dest
-    }
+    download_file $url $dest
 
     if (-not $SkipVerify) {
         $actual = sha256_file $dest
@@ -192,9 +183,7 @@ function Download-Tool($tool) {
 }
 
 function Download-Tools {
-    foreach ($tool in $Tools) {
-        Download-Tool $tool
-    }
+    foreach ($tool in $Tools) { Download-Tool $tool }
 }
 
 # ---- Copy skills ----
@@ -254,9 +243,7 @@ function Get-OpencodeConfig {
 
 function Update-OpencodeConfig {
     $configPath = Get-OpencodeConfig
-    if (-not $configPath) {
-        $configPath = Join-Path (Get-Location) "opencode.json"
-    }
+    if (-not $configPath) { $configPath = Join-Path (Get-Location) "opencode.json" }
 
     $data = @{}
     if (Test-Path $configPath) {
@@ -311,9 +298,9 @@ function Install-SkillsToProject {
 # ---- Verify installation ----
 function Verify-Installation {
     $errors = 0
-    Write-Host "`n--- РџСЂРѕРІРµСЂРєР° СѓСЃС‚Р°РЅРѕРІР»РµРЅРЅС‹С… С„Р°Р№Р»РѕРІ ---`n"
+    Write-Host ""
 
-    Write-Host "  Р‘РёРЅР°СЂРЅРёРєРё ($ToolsDir):"
+    Write-Host "  Binaries ($ToolsDir):"
     $toolList = @("unica.exe", "v8-runner.exe", "bsl-analyzer.exe", "rlm-tools-bsl.exe", "rlm-bsl-index.exe")
     foreach ($tool in $toolList) {
         $path = Join-Path $ToolsDir $tool
@@ -321,43 +308,45 @@ function Verify-Installation {
             $size = (Get-Item $path).Length
             if ($tool -eq "unica.exe") {
                 $result = & $path --help 2>&1 | Select-String -Pattern "unica"
-                if ($result) { Write-Host "    [OK]  $tool ($size bytes, Р·Р°РїСѓСЃРєР°РµС‚СЃСЏ)" -ForegroundColor Green }
-                else { Write-Host "    [ERR] $tool (С„Р°Р№Р» РµСЃС‚СЊ, РЅРѕ РЅРµ Р·Р°РїСѓСЃРєР°РµС‚СЃСЏ)" -ForegroundColor Red; $errors++ }
+                if ($result) { Write-Host "    [OK]  $tool ($size bytes, runs)" -ForegroundColor Green }
+                else { Write-Host "    [ERR] $tool (file exists, but not running)" -ForegroundColor Red; $errors++ }
             } else {
                 Write-Host "    [OK]  $tool ($size bytes)" -ForegroundColor Green
             }
         } else {
-            Write-Host "    [--]  $tool (РЅРµ СѓСЃС‚Р°РЅРѕРІР»РµРЅ)" -ForegroundColor DarkYellow
+            Write-Host "    [--]  $tool (not installed)" -ForegroundColor DarkYellow
             $errors++
         }
     }
 
-    Write-Host "`n  РњР°РЅРёС„РµСЃС‚:"
+    Write-Host ""
+    Write-Host "  Manifest:"
     $manifest = Join-Path $ThirdPartyDir "manifest.json"
     if (Test-Path $manifest) {
         Write-Host "    [OK]  manifest.json" -ForegroundColor Green
     } else {
-        Write-Host "    [--]  manifest.json (РЅРµ РЅР°Р№РґРµРЅ)" -ForegroundColor DarkYellow; $errors++
-    }
-
-    Write-Host "`n  РќР°РІС‹РєРё:"
-    if (Test-Path $SkillsDir) {
-        $skillCount = (Get-ChildItem $SkillsDir -Recurse -Filter "SKILL.md").Count
-        Write-Host "    [OK]  skills/ ($skillCount РЅР°РІС‹РєРѕРІ)" -ForegroundColor Green
-    } else {
-        Write-Host "    [--]  skills/ (РЅРµ СѓСЃС‚Р°РЅРѕРІР»РµРЅС‹)" -ForegroundColor DarkYellow; $errors++
+        Write-Host "    [--]  manifest.json (not found)" -ForegroundColor DarkYellow; $errors++
     }
 
     Write-Host ""
-    if ($errors -eq 0) { msg "Р’СЃРµ РєРѕРјРїРѕРЅРµРЅС‚С‹ СѓСЃС‚Р°РЅРѕРІР»РµРЅС‹" }
-    else { warn "$errors РєРѕРјРїРѕРЅРµРЅС‚РѕРІ РѕС‚СЃСѓС‚СЃС‚РІСѓСЋС‚ РёР»Рё РїРѕРІСЂРµР¶РґРµРЅС‹" }
+    Write-Host "  Skills:"
+    if (Test-Path $SkillsDir) {
+        $skillCount = (Get-ChildItem $SkillsDir -Recurse -Filter "SKILL.md").Count
+        Write-Host "    [OK]  skills/ ($skillCount skills)" -ForegroundColor Green
+    } else {
+        Write-Host "    [--]  skills/ (not installed)" -ForegroundColor DarkYellow; $errors++
+    }
+
+    Write-Host ""
+    if ($errors -eq 0) { msg "All components installed" }
+    else { warn "$errors components missing or damaged" }
 }
 
 # ---- Main ----
 function Main {
     Write-Host ""
     Write-Host "==============================================" -ForegroundColor Cyan
-    Write-Host " vitebc/unica вЂ” Windows installer" -ForegroundColor Cyan
+    Write-Host " vitebc/unica -- Windows installer" -ForegroundColor Cyan
     Write-Host "==============================================" -ForegroundColor Cyan
     Write-Host ""
 
