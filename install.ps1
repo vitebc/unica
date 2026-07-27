@@ -44,15 +44,12 @@ if ($Help) {
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
-# ---- One-liner redirect: if PSCommandPath is empty (iex from URL), clone and re-exec ----
-if (-not $PSCommandPath -and -not (Test-Path ".\Cargo.toml")) {
-    Write-Host "==> Detected one-liner install. Cloning vitebc/unica..." -ForegroundColor Cyan
+# ---- One-liner redirect if Cargo.toml not found in current dir ----
+if (-not (Test-Path ".\Cargo.toml")) {
+    Write-Host "==> Cloning vitebc/unica..." -ForegroundColor Cyan
     $workDir = Join-Path $env:TEMP "unica-install-$PID"
     if (Test-Path $workDir) { Remove-Item -Recurse -Force $workDir }
-    $origPref = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    git clone --depth 1 "https://github.com/vitebc/unica.git" $workDir 2>&1 | Out-Null
-    $ErrorActionPreference = $origPref
+    & git clone --depth 1 "https://github.com/vitebc/unica.git" $workDir 2>$null
     & "$workDir\install.ps1" @PSBoundParameters
     exit $LASTEXITCODE
 }
