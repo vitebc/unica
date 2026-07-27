@@ -32,10 +32,7 @@ curl -fsSL https://github.com/vitebc/unica/raw/main/install.sh | bash -s -- -y -
 
 **Windows (PowerShell 5.1+):**
 ```powershell
-$uri = "https://github.com/vitebc/unica/raw/main/install.ps1"
-$tmp = "$env:TEMP\unica-install.ps1"
-Invoke-WebRequest -UseBasicParsing $uri -OutFile $tmp
-& $tmp
+iwr -useb https://github.com/vitebc/unica/raw/main/install.ps1 -OutFile $env:TEMP\unica.ps1; & $env:TEMP\unica.ps1
 ```
 
 ### Подробно (клонированием)
