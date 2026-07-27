@@ -54,7 +54,7 @@ if (-not (Test-Path ".\Cargo.toml")) {
     $null = git clone --depth 1 "https://github.com/vitebc/unica.git" $workDir 2>&1
     $ErrorActionPreference = $origPref
     if ($LASTEXITCODE -ne 0) { throw "git clone failed (exit $LASTEXITCODE)" }
-    & "$workDir\install.ps1" @PSBoundParameters
+    powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File "$workDir\install.ps1"
     exit $LASTEXITCODE
 }
 
