@@ -138,6 +138,7 @@ install_unica() {
         fi
         (cd "$repo_dir" && cargo build --release --package unica-coder --bin unica)
         mkdir -p "$(dirname "$UNICA_BIN")"
+        rm -f "$UNICA_BIN"
         cp "$repo_dir/target/release/unica" "$UNICA_BIN"
         chmod +x "$UNICA_BIN"
         local skills_src="$repo_dir/plugins/unica/skills"

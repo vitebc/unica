@@ -277,6 +277,7 @@ build_unica() {
     fi
     (cd "$REPO_ROOT" && cargo build --release --package unica-coder --bin unica)
     mkdir -p "$TOOLS_DIR"
+    rm -f "$TOOLS_DIR/unica${EXE}"
     cp "$REPO_ROOT/target/release/unica${EXE}" "$TOOLS_DIR/unica${EXE}"
     chmod +x "$TOOLS_DIR/unica${EXE}"
     msg "unica built: $TOOLS_DIR/unica${EXE}"
