@@ -156,6 +156,12 @@ rm -rf ~/.local/share/opencode/unica
 
 Unica можно развернуть на сервере для удалённого доступа.
 
+### One-liner
+
+```sh
+curl -fsSL https://github.com/vitebc/unica/raw/main/install-server.sh | sudo bash -s -- -y
+```
+
 ### Быстрый старт
 
 ```sh

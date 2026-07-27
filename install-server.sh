@@ -16,6 +16,15 @@ set -euo pipefail
 #   --help                Show this help
 # ============================================================
 
+# ---- One-liner redirect: if not inside the repo, clone and re-exec ----
+if [[ ! -f "${0%/*}/Cargo.toml" ]] && [[ ! -f "Cargo.toml" ]]; then
+    echo "==> Detected one-liner install. Cloning vitebc/unica..."
+    WORK_DIR="$(mktemp -d 2>/dev/null || echo "/tmp/unica-server-install-$$")"
+    mkdir -p "$WORK_DIR"
+    git clone --depth 1 "https://github.com/vitebc/unica.git" "$WORK_DIR"
+    exec sudo bash "$WORK_DIR/install-server.sh" "$@"
+fi
+
 SERVER_PORT=3001
 HOST="0.0.0.0"
 UNICA_DIR=""
@@ -70,7 +79,7 @@ RUN_USER="${SUDO_USER:-$USER}"
 RUN_HOME="$(eval echo "~$RUN_USER")"
 msg "Service user: ${RUN_USER} (home: ${RUN_HOME})"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$PWD}")" && pwd 2>/dev/null || echo "$PWD")"
 if [[ -z "$UNICA_DIR" ]]; then
     UNICA_DIR="${RUN_HOME}/.local/share/opencode/unica"
 fi
